@@ -14,6 +14,7 @@ public class TicketServiceImpl implements TicketService {
     private static final int MAX_TICKETS = 25; //remember to externalise this in the properties file
     private static final int CHILD_PRICE = 15;
     private static final int ADULT_PRICE = 25;
+    private static final int INFANT_PRICE = 0;
 
     private final TicketPaymentService paymentService;
     private final SeatReservationService reservationService;
@@ -35,14 +36,14 @@ public class TicketServiceImpl implements TicketService {
     }
 
     private void validatePurchaseRequest(Long accountId, TicketTypeRequest... ticketTypeRequests) throws InvalidPurchaseException {
-        if (accountId <= 0) throw new InvalidPurchaseException("Invalid account ID");
+        if (Objects.isNull(accountId) || accountId <= 0) throw new InvalidPurchaseException("Invalid account ID");
 
         if (Objects.isNull(ticketTypeRequests) || ticketTypeRequests.length == 0)
             throw new InvalidPurchaseException("No tickets requested");
 
         int totalTickets = 0, adultTickets = 0, childTickets = 0, infantTickets = 0;
 
-        for (TicketTypeRequest request : ticketTypeRequests) {
+        for (var request : ticketTypeRequests) {
             if (request.getNoOfTickets() < 0) throw new InvalidPurchaseException("Invalid number of tickets");
 
             totalTickets += request.getNoOfTickets();
@@ -64,13 +65,12 @@ public class TicketServiceImpl implements TicketService {
     }
 
     private int calculateTotalAmount(TicketTypeRequest... ticketTypeRequests) {
-        int totalAmount = 0;
+        var totalAmount = 0;
         for (TicketTypeRequest request : ticketTypeRequests) {
             switch (request.getTicketType()) {
                 case ADULT -> totalAmount += request.getNoOfTickets() * ADULT_PRICE;
                 case CHILD -> totalAmount += request.getNoOfTickets() * CHILD_PRICE;
-
-                // Infants are free, so no need to add to the total
+                case INFANT -> totalAmount += request.getNoOfTickets() * INFANT_PRICE;
             }
         }
 
@@ -78,7 +78,7 @@ public class TicketServiceImpl implements TicketService {
     }
 
     private int calculateSeatsToReserve(TicketTypeRequest... ticketTypeRequests) {
-        int seatsToReserve = 0;
+        var seatsToReserve = 0;
         for (TicketTypeRequest request : ticketTypeRequests) {
             if (request.getTicketType() != TicketTypeRequest.Type.INFANT) {
                 seatsToReserve += request.getNoOfTickets();
