@@ -26,21 +26,36 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public void purchaseTickets(Long accountId, TicketTypeRequest... ticketTypeRequests) throws InvalidPurchaseException {
-        validatePurchaseRequest(accountId, ticketTypeRequests);
+        var ticketCounts = validatePurchaseRequest(accountId, ticketTypeRequests);
 
-        int totalAmount = calculateTotalAmount(ticketTypeRequests);
-        int seatsToReserve = calculateSeatsToReserve(ticketTypeRequests);
+        var totalAmount = calculateTotalAmount(ticketCounts);
+        var seatsToReserve = calculateSeatsToReserve(ticketCounts);
 
         paymentService.makePayment(accountId, totalAmount);
         reservationService.reserveSeat(accountId, seatsToReserve);
     }
 
-    private void validatePurchaseRequest(Long accountId, TicketTypeRequest... ticketTypeRequests) throws InvalidPurchaseException {
+    private TicketCounts validatePurchaseRequest(Long accountId, TicketTypeRequest... ticketTypeRequests) throws InvalidPurchaseException {
         if (Objects.isNull(accountId) || accountId <= 0) throw new InvalidPurchaseException("Invalid account ID");
 
         if (Objects.isNull(ticketTypeRequests) || ticketTypeRequests.length == 0)
             throw new InvalidPurchaseException("No tickets requested");
 
+        var ticketCounts = aggregateTicketCounts(ticketTypeRequests);
+
+        if (ticketCounts.totalTickets > MAX_TICKETS)
+            throw new InvalidPurchaseException(String.format("Maximum %d tickets per purchase", MAX_TICKETS));
+
+        if (ticketCounts.adultTickets == 0 && (ticketCounts.childTickets > 0 || ticketCounts.infantTickets > 0))
+            throw new InvalidPurchaseException("Child and Infant tickets require at least one Adult ticket.");
+
+        if (ticketCounts.infantTickets > ticketCounts.adultTickets)
+            throw new InvalidPurchaseException("Each Infant must be accompanied by one Adult.");
+
+        return ticketCounts;
+    }
+
+    private TicketCounts aggregateTicketCounts(TicketTypeRequest... ticketTypeRequests) {
         int totalTickets = 0, adultTickets = 0, childTickets = 0, infantTickets = 0;
 
         for (var request : ticketTypeRequests) {
@@ -54,38 +69,19 @@ public class TicketServiceImpl implements TicketService {
             }
         }
 
-        if (totalTickets > MAX_TICKETS)
-            throw new InvalidPurchaseException(String.format("Maximum %d tickets per purchase", MAX_TICKETS));
-
-        if (adultTickets == 0 && (childTickets > 0 || infantTickets > 0))
-            throw new InvalidPurchaseException("Child and Infant tickets require at least one Adult ticket.");
-
-        if (infantTickets > adultTickets)
-            throw new InvalidPurchaseException("Each Infant must be accompanied by one Adult.");
+        return new TicketCounts(adultTickets, childTickets, infantTickets, totalTickets);
     }
 
-    private int calculateTotalAmount(TicketTypeRequest... ticketTypeRequests) {
-        var totalAmount = 0;
-        for (TicketTypeRequest request : ticketTypeRequests) {
-            switch (request.getTicketType()) {
-                case ADULT -> totalAmount += request.getNoOfTickets() * ADULT_PRICE;
-                case CHILD -> totalAmount += request.getNoOfTickets() * CHILD_PRICE;
-                case INFANT -> totalAmount += request.getNoOfTickets() * INFANT_PRICE;
-            }
-        }
-
-        return totalAmount;
+    private int calculateTotalAmount(TicketCounts ticketCounts) {
+        return (ticketCounts.adultTickets * ADULT_PRICE)
+                + (ticketCounts.childTickets * CHILD_PRICE)
+                + (ticketCounts.infantTickets * INFANT_PRICE);
     }
 
-    private int calculateSeatsToReserve(TicketTypeRequest... ticketTypeRequests) {
-        var seatsToReserve = 0;
-        for (TicketTypeRequest request : ticketTypeRequests) {
-            if (request.getTicketType() != TicketTypeRequest.Type.INFANT) {
-                seatsToReserve += request.getNoOfTickets();
-            }
-        }
-
-        return seatsToReserve;
+    private int calculateSeatsToReserve(TicketCounts ticketCounts) {
+        return ticketCounts.adultTickets + ticketCounts.childTickets;
     }
+
+    private record TicketCounts(int adultTickets, int childTickets, int infantTickets, int totalTickets) {}
 
 }
