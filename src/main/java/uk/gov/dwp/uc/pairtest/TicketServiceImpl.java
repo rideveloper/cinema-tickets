@@ -2,6 +2,7 @@ package uk.gov.dwp.uc.pairtest;
 
 import thirdparty.paymentgateway.TicketPaymentService;
 import thirdparty.seatbooking.SeatReservationService;
+import uk.gov.dwp.uc.pairtest.domain.TicketCount;
 import uk.gov.dwp.uc.pairtest.domain.TicketTypeRequest;
 import uk.gov.dwp.uc.pairtest.exception.InvalidPurchaseException;
 
@@ -35,7 +36,7 @@ public class TicketServiceImpl implements TicketService {
         reservationService.reserveSeat(accountId, seatsToReserve);
     }
 
-    private TicketCounts validatePurchaseRequest(Long accountId, TicketTypeRequest... ticketTypeRequests) throws InvalidPurchaseException {
+    private TicketCount validatePurchaseRequest(Long accountId, TicketTypeRequest... ticketTypeRequests) throws InvalidPurchaseException {
         if (Objects.isNull(accountId) || accountId <= 0) throw new InvalidPurchaseException("Invalid account ID");
 
         if (Objects.isNull(ticketTypeRequests) || ticketTypeRequests.length == 0)
@@ -43,19 +44,19 @@ public class TicketServiceImpl implements TicketService {
 
         var ticketCounts = aggregateTicketCounts(ticketTypeRequests);
 
-        if (ticketCounts.totalTickets > MAX_TICKETS)
+        if (ticketCounts.totalTickets() > MAX_TICKETS)
             throw new InvalidPurchaseException(String.format("Maximum %d tickets per purchase", MAX_TICKETS));
 
-        if (ticketCounts.adultTickets == 0 && (ticketCounts.childTickets > 0 || ticketCounts.infantTickets > 0))
+        if (ticketCounts.adultTickets() == 0 && (ticketCounts.childTickets() > 0 || ticketCounts.infantTickets() > 0))
             throw new InvalidPurchaseException("Child and Infant tickets require at least one Adult ticket.");
 
-        if (ticketCounts.infantTickets > ticketCounts.adultTickets)
+        if (ticketCounts.infantTickets() > ticketCounts.adultTickets())
             throw new InvalidPurchaseException("Each Infant must be accompanied by one Adult.");
 
         return ticketCounts;
     }
 
-    private TicketCounts aggregateTicketCounts(TicketTypeRequest... ticketTypeRequests) {
+    private TicketCount aggregateTicketCounts(TicketTypeRequest... ticketTypeRequests) {
         int totalTickets = 0, adultTickets = 0, childTickets = 0, infantTickets = 0;
 
         for (var request : ticketTypeRequests) {
@@ -69,19 +70,17 @@ public class TicketServiceImpl implements TicketService {
             }
         }
 
-        return new TicketCounts(adultTickets, childTickets, infantTickets, totalTickets);
+        return new TicketCount(adultTickets, childTickets, infantTickets, totalTickets);
     }
 
-    private int calculateTotalAmount(TicketCounts ticketCounts) {
-        return (ticketCounts.adultTickets * ADULT_PRICE)
-                + (ticketCounts.childTickets * CHILD_PRICE)
-                + (ticketCounts.infantTickets * INFANT_PRICE);
+    private int calculateTotalAmount(TicketCount ticketCounts) {
+        return (ticketCounts.adultTickets() * ADULT_PRICE)
+                + (ticketCounts.childTickets() * CHILD_PRICE)
+                + (ticketCounts.infantTickets() * INFANT_PRICE);
     }
 
-    private int calculateSeatsToReserve(TicketCounts ticketCounts) {
-        return ticketCounts.adultTickets + ticketCounts.childTickets;
+    private int calculateSeatsToReserve(TicketCount ticketCounts) {
+        return ticketCounts.adultTickets() + ticketCounts.childTickets();
     }
-
-    private record TicketCounts(int adultTickets, int childTickets, int infantTickets, int totalTickets) {}
 
 }
